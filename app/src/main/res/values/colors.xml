@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_dark">#FF121212</color>
+    <color name="surface_dark">#FF1E1E1E</color>
+    <color name="surface_variant">#FF2A2A2A</color>
+    <color name="status_bar_bg">#FF1A1A1A</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFB0B0B0</color>
+    <color name="text_hint">#FF808080</color>
+    <color name="green_send">#FF4CAF50</color>
+    <color name="green_status">#FF4CAF50</color>
+    <color name="yellow_status">#FFFFC107</color>
+    <color name="blue_status">#FF2196F3</color>
+    <color name="orange_status">#FFFF9800</color>
+    <color name="user_bubble">#FF2A2A2A</color>
+    <color name="assistant_bubble">#FF1A3A1A</color>
+    <color name="input_bg">#FF2A2A2A</color>
+    <color name="divider">#FF333333</color>
+</resources>

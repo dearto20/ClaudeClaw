@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ClaudeClaw" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#FF3FB950</item>
+        <item name="colorOnPrimary">#FF000000</item>
+        <item name="android:windowBackground">#FF0D1117</item>
+        <item name="android:statusBarColor">#FF0D1117</item>
+        <item name="android:navigationBarColor">#FF0D1117</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

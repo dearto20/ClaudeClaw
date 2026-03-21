@@ -1,0 +1,21 @@
+{
+  "name": "design",
+  "description": "Set up the visual design system — colors, typography, and spacing. Creates the CSS foundation for the app.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "palette": {
+        "type": "object",
+        "properties": {
+          "bg": { "type": "string", "description": "Background color" },
+          "surface": { "type": "string", "description": "Card/surface color" },
+          "accent": { "type": "string", "description": "Primary accent color" },
+          "accent2": { "type": "string", "description": "Secondary accent color" },
+          "text": { "type": "string", "description": "Primary text color" },
+          "muted": { "type": "string", "description": "Muted/secondary text color" }
+        }
+      }
+    },
+    "required": ["palette"]
+  }
+}

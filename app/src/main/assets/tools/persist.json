@@ -1,0 +1,11 @@
+{
+  "name": "persist",
+  "description": "Configure how data is stored. Daily resets each day. Session clears on close. Permanent keeps forever.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "strategy": { "type": "string", "enum": ["daily", "session", "permanent"], "description": "Storage scoping strategy" }
+    },
+    "required": ["strategy"]
+  }
+}

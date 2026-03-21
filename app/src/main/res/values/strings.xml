@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ClaudeClaw</string>
+    <string name="hint_ask">Ask ClaudeClaw…</string>
+    <string name="send">Send</string>
+</resources>

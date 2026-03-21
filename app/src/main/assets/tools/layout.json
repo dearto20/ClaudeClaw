@@ -1,0 +1,14 @@
+{
+  "name": "layout",
+  "description": "Create the app structure — header, navigation, and content areas.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": { "type": "string", "description": "App display name" },
+      "nav_type": { "type": "string", "enum": ["tabs", "single", "drawer"], "description": "Navigation style" },
+      "nav_items": { "type": "array", "items": { "type": "string" }, "description": "Navigation item names" },
+      "show_date": { "type": "boolean", "description": "Show date in header" }
+    },
+    "required": ["name", "nav_type"]
+  }
+}

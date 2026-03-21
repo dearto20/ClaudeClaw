@@ -8,3 +8,4 @@
 .externalNativeBuild
 .cxx
 /server/__pycache__
+/app/src/main/assets/skills

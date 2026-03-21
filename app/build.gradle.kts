@@ -35,6 +35,14 @@ android {
     }
 }
 
+// Copy .claude/skills/*/SKILL.md into assets/skills/ at build time
+val syncSkills by tasks.registering(Sync::class) {
+    from(rootProject.file(".claude/skills"))
+    into(layout.projectDirectory.dir("src/main/assets/skills"))
+    include("*/SKILL.md")
+}
+tasks.named("preBuild") { dependsOn(syncSkills) }
+
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")

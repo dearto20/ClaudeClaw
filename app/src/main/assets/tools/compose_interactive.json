@@ -1,0 +1,15 @@
+{
+  "name": "compose_interactive",
+  "description": "Add interactive components — timers, pickers, selectors. Use for any feature with real-time interaction or selection from options.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "page": { "type": "string", "description": "Which page/tab to add to" },
+      "title": { "type": "string", "description": "Section title" },
+      "key": { "type": "string", "description": "Storage key" },
+      "variant": { "type": "string", "enum": ["timer", "mood"], "description": "timer = countdown with controls, mood = emoji picker" },
+      "config": { "type": "object", "description": "timer: {work, break, sessions}. mood: {emojis: [string array]}" }
+    },
+    "required": ["page", "variant", "key"]
+  }
+}

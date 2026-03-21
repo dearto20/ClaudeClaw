@@ -1,43 +1,36 @@
 package com.claudeclaw.app
 
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.util.concurrent.TimeUnit
 
-sealed class StreamEvent {
-    data class Text(val text: String) : StreamEvent()
-    data class Usage(val inputTokens: Int, val outputTokens: Int) : StreamEvent()
-    data class Error(val message: String) : StreamEvent()
-    data class Status(val status: String) : StreamEvent()
-    data class SkillSelected(val name: String) : StreamEvent()
-    data class ToolCall(val name: String, val id: String, val input: JSONObject) : StreamEvent()
-    object Done : StreamEvent()
-}
+/**
+ * An agent that extends BaseTool — can be nested in another agent's tools[].
+ * Owns the two-phase flow: planning (skill selection) → execution (agentic loop).
+ */
+class AgentTool(
+    name: String,
+    val model: String,
+    val instructions: String,
+    val tools: List<BaseTool>,
+    private val apiClient: ClaudeApiClient
+) : BaseTool(name) {
 
-class ClaudeApiService(private var apiKey: String) {
+    val skills: List<SkillToolSet> get() = tools.filterIsInstance<SkillToolSet>()
+    val functionTools: List<FunctionTool> get() = tools.filterIsInstance<FunctionTool>()
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(300, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    /** When nested as a tool in a parent agent, expose all tool definitions. */
+    override fun definitions() = tools.flatMap { it.definitions() }
 
-    var model: String = "claude-sonnet-4-6"
-    fun updateApiKey(key: String) { apiKey = key }
-
-    fun streamMessage(messages: List<ChatMessage>, registry: SkillRegistry): Flow<StreamEvent> = callbackFlow {
+    /** Run the two-phase agent flow, emitting StreamEvents. */
+    fun run(messages: List<ChatMessage>): Flow<StreamEvent> = callbackFlow {
         withContext(Dispatchers.IO) {
             try {
                 val jsonMessages = JSONArray()
@@ -49,22 +42,22 @@ class ClaudeApiService(private var apiKey: String) {
                 var totalIn = 0; var totalOut = 0
 
                 // ══════════════════════════════════════
-                // PHASE 1: Planning — skill selection, no tools
+                // PHASE 1: Planning — all skills in prompt, LLM picks one
                 // ══════════════════════════════════════
                 trySend(StreamEvent.Status("Planning..."))
 
                 val phase1Body = JSONObject().apply {
                     put("model", model); put("max_tokens", 1024)
                     put("stream", true)
-                    put("system", registry.planningPrompt())
+                    put("system", planningPrompt())
                     put("messages", jsonMessages)
                 }
 
                 val planText = StringBuilder()
-                var selectedSkill = ""
 
-                val planResponse = apiCall(phase1Body) ?: run {
-                    trySend(StreamEvent.Error("API call failed")); trySend(StreamEvent.Done); close(); return@withContext
+                val planResponse = apiClient.call(phase1Body) ?: run {
+                    trySend(StreamEvent.Error("API call failed"))
+                    trySend(StreamEvent.Done); close(); return@withContext
                 }
 
                 val planReader = BufferedReader(InputStreamReader(planResponse.body!!.byteStream()))
@@ -86,11 +79,11 @@ class ClaudeApiService(private var apiKey: String) {
                             }
                             "message_start" -> {
                                 val u = ev.optJSONObject("message")?.optJSONObject("usage")
-                                if (u != null) { totalIn += u.optInt("input_tokens", 0) }
+                                if (u != null) totalIn += u.optInt("input_tokens", 0)
                             }
                             "message_delta" -> {
                                 val u = ev.optJSONObject("usage")
-                                if (u != null) { totalOut += u.optInt("output_tokens", 0) }
+                                if (u != null) totalOut += u.optInt("output_tokens", 0)
                             }
                         }
                     } catch (_: Exception) {}
@@ -100,31 +93,35 @@ class ClaudeApiService(private var apiKey: String) {
 
                 // Extract skill from [SKILL:name] tag
                 val skillMatch = Regex("\\[SKILL:(\\S+)]").find(planText.toString())
-                selectedSkill = skillMatch?.groupValues?.get(1) ?: "rapid-prototype"
-                Log.d("ClaudeClaw", "Selected skill: $selectedSkill")
-                trySend(StreamEvent.SkillSelected(selectedSkill))
+                val selectedSkillName = skillMatch?.groupValues?.get(1) ?: skills.firstOrNull()?.name ?: ""
+                val selectedSkill = skills.find { it.name == selectedSkillName }
+                Log.d("ClaudeClaw", "Selected skill: $selectedSkillName")
+                trySend(StreamEvent.SkillSelected(selectedSkillName))
 
                 // ══════════════════════════════════════
-                // PHASE 2: Execution — load tools, call them
+                // PHASE 2: Execution — scoped tools, agentic loop
                 // ══════════════════════════════════════
                 trySend(StreamEvent.Status("Loading tools..."))
 
-                val tools = registry.toolsForSkill(selectedSkill)
-                Log.d("ClaudeClaw", "Loaded ${tools.length()} tools for skill:$selectedSkill")
+                val scopedTools = if (selectedSkill != null && selectedSkill.definitions().isNotEmpty()) {
+                    selectedSkill.definitions()
+                } else {
+                    tools.flatMap { it.definitions() }
+                }
+                val toolsArray = JSONArray().apply { scopedTools.forEach { put(it) } }
+                Log.d("ClaudeClaw", "Loaded ${toolsArray.length()} tools for skill:$selectedSkillName")
 
                 // Build conversation for phase 2
                 val phase2Messages = JSONArray(jsonMessages.toString())
-                // Add the planning response as assistant message (without the [SKILL:] tag)
                 val cleanPlan = planText.toString().replace(Regex("\\[SKILL:\\S+]"), "").trim()
                 phase2Messages.put(JSONObject().apply {
                     put("role", "assistant"); put("content", cleanPlan)
                 })
-                // Add a user message to trigger tool execution
                 phase2Messages.put(JSONObject().apply {
                     put("role", "user"); put("content", "Go ahead and execute the plan using your tools.")
                 })
 
-                // Tool use loop
+                // Agentic tool use loop
                 val apiMessages = phase2Messages
                 while (true) {
                     trySend(StreamEvent.Status("Building..."))
@@ -132,12 +129,12 @@ class ClaudeApiService(private var apiKey: String) {
                     val phase2Body = JSONObject().apply {
                         put("model", model); put("max_tokens", 4096)
                         put("stream", true)
-                        put("system", registry.executionPrompt(selectedSkill))
-                        put("tools", tools as Any)
+                        put("system", executionPrompt(selectedSkill))
+                        put("tools", toolsArray as Any)
                         put("messages", apiMessages)
                     }
 
-                    val response = apiCall(phase2Body)
+                    val response = apiClient.call(phase2Body)
                     if (response == null) {
                         trySend(StreamEvent.Error("API call failed")); break
                     }
@@ -204,10 +201,10 @@ class ClaudeApiService(private var apiKey: String) {
                     if (stopReason == "tool_use" && toolCalls.isNotEmpty()) {
                         apiMessages.put(JSONObject().apply { put("role", "assistant"); put("content", contentBlocks) })
                         val results = JSONArray()
-                        for ((name, id, _) in toolCalls) {
+                        for ((tName, id, _) in toolCalls) {
                             results.put(JSONObject().apply {
                                 put("type", "tool_result"); put("tool_use_id", id)
-                                put("content", "$name completed")
+                                put("content", "$tName completed")
                             })
                         }
                         apiMessages.put(JSONObject().apply { put("role", "user"); put("content", results) })
@@ -228,31 +225,32 @@ class ClaudeApiService(private var apiKey: String) {
         awaitClose {}
     }
 
-    private fun apiCall(body: JSONObject): okhttp3.Response? {
-        for (attempt in 1..3) {
-            val req = Request.Builder()
-                .url("https://api.anthropic.com/v1/messages")
-                .addHeader("x-api-key", apiKey)
-                .addHeader("anthropic-version", "2023-06-01")
-                .addHeader("content-type", "application/json")
-                .post(body.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-            val resp = client.newCall(req).execute()
-            if (resp.code == 529 || resp.code == 429) {
-                resp.close(); Thread.sleep(attempt * 5000L); continue
-            }
-            if (!resp.isSuccessful) {
-                Log.e("ClaudeClaw", "API ${resp.code}: ${resp.body?.string()?.take(200)}")
-                resp.close(); return null
-            }
-            return resp
+    private fun planningPrompt(): String {
+        val skillList = skills.joinToString("\n\n") { skill ->
+            "### ${skill.name}\n${skill.description}\n\n${skill.instructions}"
         }
-        return null
+
+        return """$instructions
+
+You have the following skills available:
+
+$skillList
+
+When the user asks you to build something:
+1. Choose the most appropriate skill
+2. Explain your plan: why this skill fits, your design approach, how you'll structure the app
+3. End your response with exactly: [SKILL:skill_name]
+
+Keep planning to 4-6 sentences. Do NOT mention specific tool names — tools are loaded after you select a skill."""
     }
 
-    companion object {
-        const val INPUT_COST_PER_MILLION = 3.0
-        const val OUTPUT_COST_PER_MILLION = 15.0
-        fun calculateCost(i: Int, o: Int) = (i * INPUT_COST_PER_MILLION + o * OUTPUT_COST_PER_MILLION) / 1_000_000.0
+    private fun executionPrompt(skill: SkillToolSet?): String {
+        return """$instructions — executing skill:${skill?.name ?: "default"}.
+
+${skill?.instructions ?: "Execute tools as needed."}
+
+The user's request and your plan are in the conversation. Now execute by calling your tools.
+Call ALL tools needed. Do NOT output text — only tool calls.
+Always call tool:deploy LAST."""
     }
 }

@@ -1,0 +1,16 @@
+{
+  "name": "compose_form",
+  "description": "Add data entry components — text inputs, text areas, forms. Use for any feature where the user types or submits text.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "page": { "type": "string", "description": "Which page/tab to add to" },
+      "title": { "type": "string", "description": "Section title" },
+      "key": { "type": "string", "description": "Storage key" },
+      "variant": { "type": "string", "enum": ["input", "textarea"], "description": "input = single line, textarea = multi-line" },
+      "placeholder": { "type": "string" },
+      "button": { "type": "string", "description": "Submit button text" }
+    },
+    "required": ["page", "variant", "key"]
+  }
+}

@@ -168,7 +168,8 @@ textarea{min-height:80px;resize:none}
                 """<div class="card"><div class="card-title">✨ Gratitude</div>
 <textarea id="journal_txt" placeholder="$ph"></textarea>
 <button class="btn btn-g" onclick="saveJournal()">$btn</button></div>
-<div id="journal_entries"></div>
+<div class="card"><div class="card-title">📝 RECENT ENTRIES</div>
+<div id="journal_entries" style="color:#8e8e93;font-size:14px">No entries yet</div></div>
 """
             }
             "timer" -> {
@@ -245,9 +246,14 @@ function pickMood(i){selMood=i;S('mood',i);document.querySelectorAll('.mood').fo
 const labels=['Rough','Meh','Okay','Good','Amazing'];
 document.getElementById('mood_label').textContent='Feeling '+labels[i];updateSummary()}
 function saveJournal(){const t=document.getElementById('journal_txt').value.trim();if(!t)return;
-S('journal',t);document.getElementById('journal_txt').value='';
-const d=document.createElement('div');d.className='entry';d.textContent=t;
-document.getElementById('journal_entries').prepend(d);updateSummary()}
+var entries=JSON.parse(G('journal_entries')||'[]');
+entries.unshift({text:t,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
+S('journal_entries',JSON.stringify(entries));S('journal',t);
+document.getElementById('journal_txt').value='';renderEntries();updateSummary()}
+function renderEntries(){var el=document.getElementById('journal_entries');
+var entries=JSON.parse(G('journal_entries')||'[]');
+if(!entries.length){el.innerHTML='No entries yet';return}
+el.innerHTML=entries.map(function(e){return '<div class="entry"><div style="font-size:11px;color:#636366;margin-bottom:4px">'+e.time+'</div>'+e.text+'</div>'}).join('')}
 let tmSec=25*60,tmRun=false,tmIv=null,tmDur=25;
 function tmSet(m){clearInterval(tmIv);tmRun=false;tmDur=m;tmSec=m*60;document.getElementById('tm_btn').textContent='Start';updTm()}
 function tmToggle(){if(tmRun)return;tmRun=true;document.getElementById('tm_btn').textContent='Running...';
@@ -285,8 +291,7 @@ if(typeof renderHabits==='function')renderHabits();
 // Restore mood
 var m2=G('mood');if(m2!=null&&typeof pickMood==='function')pickMood(parseInt(m2));
 // Restore journal
-var je=document.getElementById('journal_entries');var jv=G('journal');
-if(je&&jv){var d=document.createElement('div');d.className='entry';d.textContent=jv;je.prepend(d)}
+if(typeof renderEntries==='function')renderEntries();
 // Restore timer stats
 var tse=document.getElementById('tm_sessions');if(tse){var ts=G('tm_s');if(ts)tse.textContent=ts}
 var tme=document.getElementById('tm_mins');if(tme){var tm=G('tm_m');if(tm)tme.textContent=tm+' min'}

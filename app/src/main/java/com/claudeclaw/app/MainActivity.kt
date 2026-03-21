@@ -2,10 +2,7 @@ package com.claudeclaw.app
 
 import android.app.AlertDialog
 import android.content.Intent
-import android.content.pm.ShortcutInfo
-import android.content.pm.ShortcutManager
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -27,9 +24,10 @@ class MainActivity : AppCompatActivity() {
     private val messages = mutableListOf<ChatMessage>()
     private val conversationHistory = mutableListOf<ChatMessage>()
     private lateinit var adapter: ChatAdapter
-    private var apiService: ClaudeApiService? = null
+    private var apiClient: ClaudeApiClient? = null
     private val appBuilder = AppBuilder()
     private lateinit var skillRegistry: SkillRegistry
+    private var agent: AgentTool? = null
     private var streamJob: Job? = null
     private var totalInputTokens = 0
     private var totalOutputTokens = 0
@@ -47,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         skillRegistry = SkillRegistry(this)
         setupRecyclerView(); setupClickListeners(); loadApiKey()
         updateStatus("Ready", 0xFF3FB950.toInt())
+        requestNotificationPermission()
     }
 
     private fun setupRecyclerView() {
@@ -59,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnSend.setOnClickListener {
             val text = binding.etMessage.text.toString().trim()
             if (text.isEmpty()) return@setOnClickListener
-            if (apiService == null) { showApiKeyDialog(); return@setOnClickListener }
+            if (agent == null) { showApiKeyDialog(); return@setOnClickListener }
             sendMessage(text)
         }
         binding.btnSettings.setOnClickListener { showApiKeyDialog() }
@@ -67,7 +66,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadApiKey() {
         val key = prefs.getString("api_key", null)
-        if (!key.isNullOrEmpty()) apiService = ClaudeApiService(key) else showApiKeyDialog()
+        if (!key.isNullOrEmpty()) {
+            apiClient = ClaudeApiClient(key)
+            agent = skillRegistry.createAgent(apiClient!!)
+        } else {
+            showApiKeyDialog()
+        }
     }
 
     private fun showApiKeyDialog() {
@@ -84,11 +88,16 @@ class MainActivity : AppCompatActivity() {
             .setTitle("API Key").setView(c)
             .setPositiveButton("Save") { _, _ ->
                 val k = input.text.toString().trim()
-                if (k.isNotEmpty()) { prefs.edit().putString("api_key", k).apply(); apiService = ClaudeApiService(k) }
+                if (k.isNotEmpty()) {
+                    prefs.edit().putString("api_key", k).apply()
+                    apiClient = ClaudeApiClient(k)
+                    agent = skillRegistry.createAgent(apiClient!!)
+                }
             }.setNegativeButton("Cancel", null).show()
     }
 
     private fun sendMessage(text: String) {
+        val currentAgent = agent ?: return
         binding.etMessage.setText("")
         messages.add(ChatMessage(role = "user", content = text))
         adapter.notifyItemInserted(messages.size - 1); scrollToBottom()
@@ -110,7 +119,7 @@ class MainActivity : AppCompatActivity() {
                 val planText = StringBuilder()
                 var lastUpdate = 0L
 
-                apiService!!.streamMessage(conversationHistory, skillRegistry).collect { event ->
+                currentAgent.run(conversationHistory).collect { event ->
                     when (event) {
                         is StreamEvent.Text -> {
                             planText.append(event.text)
@@ -124,7 +133,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                         is StreamEvent.SkillSelected -> {
-                            toolLog.add("▶ skill:${event.name}")
+                            activeSkill = event.name
                             val display = planText.toString().replace(Regex("\\[SKILL:\\S+]"), "").trim()
                             messages[idx] = messages[idx].copy(content = buildDisplay(StringBuilder(display)))
                             adapter.notifyItemChanged(idx, "t"); scrollToBottom()
@@ -135,8 +144,7 @@ class MainActivity : AppCompatActivity() {
                             processToolCall(event.name, event.input)
                             if (event.name == "layout") appName = event.input.optString("name", "App")
 
-                            // Pace tool display — wait a beat so user can read each one
-                            kotlinx.coroutines.delay(400)
+                            kotlinx.coroutines.delay(200)
 
                             val display = planText.toString().replace(Regex("\\[SKILL:\\S+]"), "").trim()
                             messages[idx] = messages[idx].copy(content = buildDisplay(StringBuilder(display)))
@@ -169,7 +177,7 @@ class MainActivity : AppCompatActivity() {
                         is StreamEvent.Usage -> {
                             totalInputTokens += event.inputTokens
                             totalOutputTokens += event.outputTokens
-                            totalCost = ClaudeApiService.calculateCost(totalInputTokens, totalOutputTokens)
+                            totalCost = ClaudeApiClient.calculateCost(totalInputTokens, totalOutputTokens)
                             updateCostDisplay()
                         }
                         is StreamEvent.Error -> {
@@ -181,8 +189,6 @@ class MainActivity : AppCompatActivity() {
                             messages[idx] = messages[idx].copy(content = buildDisplay(planText))
                             adapter.notifyItemChanged(idx)
                             conversationHistory.add(ChatMessage(role = "assistant", content = planText.toString()))
-
-                            // Build happens in ToolCall handler when deploy is called
                             updateStatus("Ready", 0xFF3FB950.toInt())
                         }
                     }
@@ -197,7 +203,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildDisplay(planText: StringBuilder): String {
-        // Show only the tool log — no duplicate text since we told Claude not to output text
         val plan = planText.toString().trim()
         if (toolLog.isEmpty() && plan.isNotEmpty()) return plan
         if (toolLog.isEmpty()) return ""
@@ -211,35 +216,37 @@ class MainActivity : AppCompatActivity() {
         return sb.toString()
     }
 
+    private var activeSkill = ""
+
     private fun describeToolCall(name: String, input: JSONObject): String {
-        val prefix = if (toolLog.isEmpty()) "▶ skill:rapid-prototype\n" else ""
-        return prefix + when (name) {
+        val prefix = if (toolLog.isEmpty()) {
+            if (activeSkill.isEmpty()) activeSkill = "rapid-prototype"
+            "▶ skill:$activeSkill\n"
+        } else ""
+
+        val page = input.optString("page", "")
+        val title = input.optString("title", "")
+        val variant = input.optString("variant", "")
+        val connector = if (name == "deploy") "└─" else "├─"
+
+        return prefix + "  $connector tool:$name" + when (name) {
             "design" -> {
-                val p = input.optJSONObject("palette")
-                val accent = p?.optString("accent", "#30D158") ?: ""
-                "  ├─ tool:design — $accent dark theme"
+                val accent = input.optJSONObject("palette")?.optString("accent", "") ?: ""
+                " — $accent dark theme"
             }
             "layout" -> {
                 val n = input.optString("name", "")
                 val items = input.optJSONArray("nav_items")
                 val tabs = if (items != null) (0 until items.length()).map { items.getString(it) }.joinToString(" · ") else ""
-                "  ├─ tool:layout — $n [$tabs]"
+                " — $n [$tabs]"
             }
-            "add_feature" -> {
-                val page = input.optString("page", "")
-                val type = input.optString("type", "")
-                val title = input.optString("title", type)
-                "  ├─ tool:add_feature — $page → $title"
-            }
-            "persist" -> {
-                val strategy = input.optString("strategy", "")
-                "  ├─ tool:persist — $strategy"
-            }
-            "deploy" -> {
-                val n = input.optString("name", "")
-                "  └─ tool:deploy — $n"
-            }
-            else -> "  ├─ tool:$name"
+            "compose_form" -> " — $page → $title ($variant)"
+            "compose_tracker" -> " — $page → $title ($variant)"
+            "compose_interactive" -> " — $page → $title ($variant)"
+            "compose_display" -> " — $page → $title"
+            "persist" -> " — ${input.optString("strategy", "")}"
+            "deploy" -> " — ${input.optString("name", "")}"
+            else -> ""
         }
     }
 
@@ -257,15 +264,26 @@ class MainActivity : AppCompatActivity() {
                 if (items != null) buildConfig.put("tabs", items)
                 buildConfig.put("show_date", input.optBoolean("show_date", true))
             }
-            "add_feature" -> {
+            "compose_form", "compose_tracker", "compose_interactive", "compose_display" -> {
                 val page = input.optString("page", "")
                 val sections = buildConfig.optJSONObject("sections") ?: JSONObject()
                 val pageArr = sections.optJSONArray(page) ?: org.json.JSONArray()
 
+                val variant = input.optString("variant", "")
+                val sectionType = when (name) {
+                    "compose_form" -> variant.ifEmpty { "input" }
+                    "compose_tracker" -> variant.ifEmpty { "counter" }
+                    "compose_interactive" -> variant.ifEmpty { "timer" }
+                    "compose_display" -> "summary"
+                    else -> variant
+                }
+
                 val section = JSONObject().apply {
-                    put("type", input.optString("type", ""))
+                    put("type", sectionType)
                     put("title", input.optString("title", ""))
                     put("key", input.optString("key", input.optString("title", "").lowercase().replace(" ", "_")))
+                    put("placeholder", input.optString("placeholder", ""))
+                    put("button", input.optString("button", ""))
                     val cfg = input.optJSONObject("config")
                     if (cfg != null) {
                         for (k in cfg.keys()) put(k, cfg.get(k))
@@ -275,7 +293,7 @@ class MainActivity : AppCompatActivity() {
                 sections.put(page, pageArr)
                 buildConfig.put("sections", sections)
             }
-            "persist" -> { /* config already handles persistence */ }
+            "persist" -> { /* handled by AppBuilder defaults */ }
             "deploy" -> {
                 if (input.has("name")) buildConfig.put("name", input.getString("name"))
             }
@@ -286,24 +304,10 @@ class MainActivity : AppCompatActivity() {
         val dir = File(filesDir, "miniapps").also { it.mkdirs() }
         val file = File(dir, name.lowercase().replace(" ", "_").replace(Regex("[^a-z0-9_]"), "") + ".html")
         file.writeText(html)
-        showDeployDialog(name, file.absolutePath, html.length)
-    }
 
-    private fun showDeployDialog(name: String, path: String, size: Int) {
         runOnUiThread {
-            val v = layoutInflater.inflate(R.layout.dialog_deploy, null)
-            v.findViewById<android.widget.TextView>(R.id.tvDeployAppName).text = name
-            v.findViewById<android.widget.TextView>(R.id.tvDeploySize).text = String.format("%.1f KB", size / 1024.0)
-            val d = AlertDialog.Builder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-                .setView(v).setCancelable(true).create()
-            d.window?.setBackgroundDrawableResource(android.R.color.transparent)
-            v.findViewById<android.widget.TextView>(R.id.btnDeployYes).setOnClickListener {
-                d.dismiss(); addToHomescreen(name, path); launchMiniApp(name, path)
-            }
-            v.findViewById<android.widget.TextView>(R.id.btnDeployNo).setOnClickListener {
-                d.dismiss(); launchMiniApp(name, path)
-            }
-            d.show()
+            addToHomescreen(name, file.absolutePath)
+            binding.rvChat.postDelayed({ launchMiniApp(name, file.absolutePath) }, 3000)
         }
     }
 
@@ -315,20 +319,38 @@ class MainActivity : AppCompatActivity() {
 
     private fun addToHomescreen(name: String, path: String) {
         try {
-            val sm = getSystemService(ShortcutManager::class.java) ?: return
-            val id = name.lowercase().replace(Regex("[^a-z0-9]"), "")
-            val intent = Intent(this, MiniAppActivity::class.java).apply {
-                action = Intent.ACTION_VIEW; putExtra("app_name", name); putExtra("file_path", path)
+            val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
+
+            val launchIntent = Intent(this, MiniAppActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                putExtra("app_name", name)
+                putExtra("file_path", path)
             }
-            val sc = ShortcutInfo.Builder(this, id).setShortLabel(name).setLongLabel(name)
-                .setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher)).setIntent(intent).build()
+
+            val sc = android.content.pm.ShortcutInfo.Builder(this,
+                name.lowercase().replace(Regex("[^a-z0-9]"), ""))
+                .setShortLabel(name)
+                .setLongLabel(name)
+                .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_launcher))
+                .setIntent(launchIntent)
+                .build()
+
             sm.addDynamicShortcuts(listOf(sc))
+
             if (sm.isRequestPinShortcutSupported) {
-                val pi = android.app.PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
-                sm.requestPinShortcut(sc, pi.intentSender)
+                sm.requestPinShortcut(sc, null)
             }
-        } catch (e: Exception) { Toast.makeText(this, "${e.message}", Toast.LENGTH_SHORT).show() }
+        } catch (e: Exception) {
+            Log.e("ClaudeClaw", "Shortcut error", e)
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 100)
+            }
+        }
     }
 
     private fun updateStatus(s: String, c: Int) {

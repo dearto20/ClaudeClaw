@@ -2,97 +2,83 @@ package com.claudeclaw.app
 
 import android.content.Context
 import android.util.Log
-import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
-// Loads skills from SKILL.md and tools from tools/*.json at runtime.
+/**
+ * Factory that discovers FunctionTools and SkillToolSets, then assembles
+ * them into an AgentTool. Mimics Claude Agent SDK's auto-discovery from
+ * .claude/skills/<name>/SKILL.md.
+ *
+ * Skills are read from internal storage (filesDir/skills/) so new skills
+ * can be installed at runtime without rebuilding.
+ */
 class SkillRegistry(private val context: Context) {
 
-    data class Skill(
-        val name: String,
-        val description: String,
-        val tools: List<String>,
-        val trigger: String,
-        val approach: String
-    )
-
-    private var _skills: List<Skill> = emptyList()
-    private var _tools: Map<String, JSONObject> = emptyMap()
-
-    val skills: List<Skill> get() = _skills
+    val skillsDir: File get() = File(context.filesDir, "skills")
 
     init {
-        loadSkillMd()
-        loadTools()
-        Log.d("ClaudeClaw", "SKILL.md: ${_skills.size} skills loaded")
-        Log.d("ClaudeClaw", "tools/: ${_tools.size} tools loaded")
+        seedBundledSkills()
     }
 
-    private fun loadSkillMd() {
-        try {
-            val raw = context.assets.open("SKILL.md").bufferedReader().readText()
-            _skills = parseSkillMd(raw)
+    /** Build the main AgentTool with all discovered tools and skills. */
+    fun createAgent(apiClient: ClaudeApiClient, model: String = "claude-sonnet-4-6"): AgentTool {
+        val functionTools = loadFunctionTools()
+        val skills = loadSkillToolSets(functionTools)
+
+        Log.d("ClaudeClaw", "skills/: ${skills.size} skills loaded")
+        Log.d("ClaudeClaw", "tools/: ${functionTools.size} tools loaded")
+
+        return AgentTool(
+            name = "claudeclaw",
+            model = model,
+            instructions = "You are ClaudeClaw, an AI coding assistant on Android.",
+            tools = skills, // skills contain scoped FunctionTools
+            apiClient = apiClient
+        )
+    }
+
+    /** Install a new skill at runtime (e.g. downloaded from a remote source). */
+    fun installSkill(name: String, content: String): Boolean {
+        return try {
+            val dir = File(skillsDir, name)
+            dir.mkdirs()
+            File(dir, "SKILL.md").writeText(content)
+            Log.d("ClaudeClaw", "Installed skill: $name")
+            true
         } catch (e: Exception) {
-            Log.e("ClaudeClaw", "Failed to load SKILL.md", e)
+            Log.e("ClaudeClaw", "Failed to install skill: $name", e)
+            false
         }
     }
 
-    private fun parseSkillMd(raw: String): List<Skill> {
-        val result = mutableListOf<Skill>()
-        // Split by --- separator
-        val sections = raw.split(Regex("\\n---\\n"))
-
-        for (section in sections) {
-            val lines = section.trim().lines()
-            // Find ## heading
-            val heading = lines.find { it.startsWith("## ") } ?: continue
-            val name = heading.removePrefix("## ").trim()
-
-            // First non-heading, non-empty line is the description
-            val descLine = lines.firstOrNull {
-                !it.startsWith("#") && !it.startsWith("-") && it.isNotBlank()
-            } ?: ""
-
-            var tools = listOf<String>()
-            var trigger = ""
-            val approach = StringBuilder()
-            var inApproach = false
-
-            for (line in lines) {
-                val trimmed = line.trim()
-                when {
-                    trimmed.startsWith("- tools:") -> {
-                        tools = trimmed.removePrefix("- tools:").trim()
-                            .split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                        inApproach = false
-                    }
-                    trimmed.startsWith("- trigger:") -> {
-                        trigger = trimmed.removePrefix("- trigger:").trim()
-                        inApproach = false
-                    }
-                    trimmed.startsWith("- approach:") -> {
-                        inApproach = true
-                    }
-                    inApproach && trimmed.matches(Regex("\\d+\\..*")) -> {
-                        approach.append(trimmed).append("\n")
-                    }
+    // Copy bundled assets/skills/ to filesDir/skills/ (skip existing)
+    private fun seedBundledSkills() {
+        val assetDirs = context.assets.list("skills") ?: return
+        for (dir in assetDirs) {
+            val target = File(skillsDir, "$dir/SKILL.md")
+            if (target.exists()) continue
+            try {
+                target.parentFile?.mkdirs()
+                context.assets.open("skills/$dir/SKILL.md").use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
                 }
-            }
-
-            if (tools.isNotEmpty()) {
-                result.add(Skill(name, descLine, tools, trigger, approach.toString().trim()))
+                Log.d("ClaudeClaw", "Seeded skill: $dir")
+            } catch (e: Exception) {
+                Log.e("ClaudeClaw", "Failed to seed skill: $dir", e)
             }
         }
-        return result
     }
 
-    private fun loadTools() {
-        val toolFiles = context.assets.list("tools") ?: return
-        _tools = toolFiles.filter { it.endsWith(".json") }.mapNotNull { fileName ->
+    // Load all FunctionTools from assets/tools/*.json
+    private fun loadFunctionTools(): Map<String, FunctionTool> {
+        val toolFiles = context.assets.list("tools") ?: return emptyMap()
+        return toolFiles.filter { it.endsWith(".json") }.mapNotNull { fileName ->
             try {
                 val raw = context.assets.open("tools/$fileName").bufferedReader().readText()
                 val json = JSONObject(raw)
-                json.getString("name") to json
+                val name = json.getString("name")
+                name to FunctionTool(name, json)
             } catch (e: Exception) {
                 Log.e("ClaudeClaw", "Failed to load tool: $fileName", e)
                 null
@@ -100,45 +86,55 @@ class SkillRegistry(private val context: Context) {
         }.toMap()
     }
 
-    fun planningPrompt(): String {
-        val skillList = _skills.joinToString("\n\n") { skill ->
-            """• skill:${skill.name} — ${skill.description}
-  Tools: ${skill.tools.joinToString(", ")}
-  When: ${skill.trigger}"""
-        }
-
-        return """You are ClaudeClaw, an AI coding assistant on Android.
-
-Your skills are defined in SKILL.md:
-
-$skillList
-
-When the user asks you to build something:
-1. Choose the most appropriate skill
-2. Explain your plan: why this skill fits, how you'll use its tools, your design decisions
-3. End your response with exactly: [SKILL:skill_name]
-
-Keep planning to 4-6 sentences."""
+    // Load all SkillToolSets from filesDir/skills/*/SKILL.md
+    private fun loadSkillToolSets(allTools: Map<String, FunctionTool>): List<SkillToolSet> {
+        if (!skillsDir.exists()) return emptyList()
+        return skillsDir.listFiles()?.filter { it.isDirectory }?.mapNotNull { dir ->
+            val file = File(dir, "SKILL.md")
+            if (!file.exists()) return@mapNotNull null
+            try {
+                parseSkillMd(file.readText(), allTools)
+            } catch (e: Exception) {
+                Log.e("ClaudeClaw", "Failed to load skill: ${dir.name}", e)
+                null
+            }
+        } ?: emptyList()
     }
 
-    fun executionPrompt(skillName: String): String {
-        val skill = _skills.find { it.name == skillName } ?: _skills.firstOrNull()
-        return """You are ClaudeClaw executing skill:${skill?.name}.
+    private fun parseSkillMd(raw: String, allTools: Map<String, FunctionTool>): SkillToolSet? {
+        if (!raw.startsWith("---")) return null
+        val endIdx = raw.indexOf("---", 3)
+        if (endIdx < 0) return null
 
-Approach from SKILL.md:
-${skill?.approach ?: "Execute tools as needed."}
+        val frontmatter = raw.substring(3, endIdx).trim()
+        val body = raw.substring(endIdx + 3).trim()
 
-The user's request and your plan are in the conversation. Now execute by calling your tools.
-Call ALL tools needed. Do NOT output text — only tool calls.
-Always call tool:deploy LAST."""
-    }
-
-    fun toolsForSkill(skillName: String): JSONArray {
-        val skill = _skills.find { it.name == skillName } ?: _skills.firstOrNull()
-        val arr = JSONArray()
-        skill?.tools?.forEach { toolName ->
-            _tools[toolName]?.let { arr.put(it) }
+        var name = ""
+        var description = ""
+        for (line in frontmatter.lines()) {
+            val trimmed = line.trim()
+            when {
+                trimmed.startsWith("name:") -> name = trimmed.removePrefix("name:").trim()
+                trimmed.startsWith("description:") -> description = trimmed.removePrefix("description:").trim()
+            }
         }
-        return arr
+        if (name.isEmpty()) return null
+
+        // Extract tool names from ## Tools section, resolve to FunctionTool instances
+        val toolNames = mutableListOf<String>()
+        val toolsMatch = Regex("## Tools\\s*\\n(.+)", RegexOption.MULTILINE).find(body)
+        if (toolsMatch != null) {
+            toolNames.addAll(
+                toolsMatch.groupValues[1].split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            )
+        }
+
+        val scopedTools = if (toolNames.isNotEmpty()) {
+            toolNames.mapNotNull { allTools[it] }
+        } else {
+            allTools.values.toList() // fallback: all tools
+        }
+
+        return SkillToolSet(name, description, body, scopedTools)
     }
 }

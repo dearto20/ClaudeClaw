@@ -1,0 +1,48 @@
+{
+  "version": 2,
+  "mandatorySourceDocs": [
+    "AGENTS.md",
+    "override/ARCHITECTURE.md"
+  ],
+  "requirements": [
+    {
+      "id": "REQ-HARNESS-USER-INTENT-PRIORITY",
+      "title": "Harness workflow must decompose requests into user-observable outcomes before implementation",
+      "tier": "hard",
+      "category": "workflow",
+      "validationMode": "automated",
+      "sourceDocs": [
+        "AGENTS.md",
+        "override/ARCHITECTURE.md",
+        "framework/process/agentic-loop.md",
+        "framework/process/sub-agent-coordination.md",
+        "framework/process/cross-agent-collaboration.md",
+        "framework/process/requirement-lifecycle.md"
+      ],
+      "guidanceDocs": [
+        "exec-plans/templates/implementation-plan.md"
+      ],
+      "artifactPaths": [
+        "../AGENTS.md",
+        "AGENTS.md",
+        "framework/process/agentic-loop.md",
+        "framework/process/sub-agent-coordination.md",
+        "framework/process/cross-agent-collaboration.md",
+        "framework/process/requirement-lifecycle.md",
+        "exec-plans/templates/implementation-plan.md",
+        "scripts/validate-agentic-loop.mjs",
+        "scripts/validate-cross-agent-review.mjs",
+        "scripts/validate-exec-plans.mjs",
+        "tests/contracts/agentic-loop-contract.test.mjs",
+        "tests/contracts/cross-agent-review-contract.test.mjs"
+      ],
+      "validationPaths": [
+        "scripts/validate-agentic-loop.mjs",
+        "scripts/validate-cross-agent-review.mjs",
+        "scripts/validate-exec-plans.mjs",
+        "tests/contracts/agentic-loop-contract.test.mjs",
+        "tests/contracts/cross-agent-review-contract.test.mjs"
+      ]
+    }
+  ]
+}

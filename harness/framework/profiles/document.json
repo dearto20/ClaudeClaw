@@ -1,0 +1,12 @@
+{
+  "profile": "document",
+  "description": "Document, slide, story, and content-artifact projects; artifact contracts and coherence are the primary gates.",
+  "mechanisms": [
+    { "id": "artifact-contracts", "template": "harness/exec-plans/templates/implementation-plan.md", "override": "override/quality/taste-invariants.md", "note": "Every deliverable gets an artifact contract; convergence gate mandatory (framework/process/review.md)" },
+    { "id": "render-check", "template": "framework/templates/target-validation-profile.md", "override": "override/validation/target-validation-profile.md", "note": "Executable checks: artifact renders/builds, links resolve, structure matches contract" },
+    { "id": "recurring-cleanup", "template": "framework/templates/recurring-cleanup.md", "override": "override/cleanup/recurring-cleanup.md" }
+  ],
+  "validationCommandGroups": ["build", "lint", "cleanup"],
+  "notApplicableByDefault": ["browser", "runtime", "observability", "integration-test", "unit-test"],
+  "primaryReviewLenses": ["coherence", "change-size"]
+}

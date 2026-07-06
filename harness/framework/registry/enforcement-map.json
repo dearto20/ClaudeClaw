@@ -1,0 +1,401 @@
+{
+  "schemaVersion": "1.0.0",
+  "note": "Enforcement coverage register: every contract obligation names the mechanical surface that enforces it, or carries a declared exception with a recorded basis. Surface kinds: commit-gate (hooks/pre-commit + harness precommit), ci (workflow step), gate (validate-*.mjs in validate-all), contract-test (tests/contracts), runtime-adapter (per-family runtime hooks/statusline; capability recorded in agents.json runtimeEnforcement), review-lens (independent critic checks it; basis names the lens), prose-declared (no mechanical surface exists; basis records why and what bounds the risk). validate-enforcement-map.mjs enforces the shape, path existence, and the required-obligation floor. Adding an obligation to the contract without adding it here is a validation failure by review convention; a prose-declared surface without a basis is a validation failure mechanically.",
+  "obligations": [
+    {
+      "id": "tier-computation",
+      "source": "harness/AGENTS.md#tiers",
+      "obligation": "Tier is computed from touched paths, never self-declared.",
+      "surfaces": [
+        {
+          "kind": "commit-gate",
+          "ref": "harness/scripts/harness.mjs"
+        },
+        {
+          "kind": "ci",
+          "ref": ".github/workflows/validate.yml"
+        }
+      ]
+    },
+    {
+      "id": "ledger-before-edits",
+      "source": "harness/AGENTS.md#tiers",
+      "obligation": "Non-trivial work has an execution ledger whose Affected Paths cover the changed paths; an unrelated ledger does not satisfy the requirement.",
+      "surfaces": [
+        {
+          "kind": "commit-gate",
+          "ref": "harness/scripts/harness.mjs"
+        },
+        {
+          "kind": "ci",
+          "ref": ".github/workflows/validate.yml"
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-exec-plans.mjs"
+        }
+      ]
+    },
+    {
+      "id": "high-risk-critic-evidence",
+      "source": "harness/AGENTS.md#dual-role-governance",
+      "obligation": "High-risk commits are commit claims and require critic terminal evidence (scoped pushback-free report or terminal dual-role ledger status); mechanical version adoption in targets is priced via the upgrade-adoption commit shape.",
+      "surfaces": [
+        {
+          "kind": "commit-gate",
+          "ref": "harness/scripts/harness.mjs"
+        },
+        {
+          "kind": "ci",
+          "ref": ".github/workflows/validate.yml"
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-cross-agent-review.mjs"
+        }
+      ]
+    },
+    {
+      "id": "visibility-tier-line",
+      "source": "harness/AGENTS.md#visibility",
+      "obligation": "Every response opens with the [harness] tier line.",
+      "surfaces": [
+        {
+          "kind": "runtime-adapter",
+          "ref": "harness/scripts/runtime-hooks/stop-tier-line-check.mjs"
+        },
+        {
+          "kind": "runtime-adapter",
+          "ref": "harness/scripts/runtime-hooks/prompt-context.mjs"
+        },
+        {
+          "kind": "runtime-adapter",
+          "ref": "harness/scripts/runtime-hooks/session-start-context.mjs"
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-runtime-adapters.mjs"
+        },
+        {
+          "kind": "prose-declared",
+          "basis": "Codex CLI exposes no statusline or prompt/response hook surface as of 2026-07-03 (agents.json runtimeEnforcement.basis); for that family the obligation is contract prose reinforced at review time. Compliance telemetry (visibility-compliance.jsonl) measures drift where the responseCheck adapter runs."
+        }
+      ]
+    },
+    {
+      "id": "visibility-transition-narration",
+      "source": "harness/AGENTS.md#visibility",
+      "obligation": "Governed work adds one line per harness-meaningful transition (tool run, skill loaded, normative doc consulted, gate result).",
+      "surfaces": [
+        {
+          "kind": "prose-declared",
+          "basis": "Which tool runs are harness-meaningful is a semantic judgment no transcript regex can decide without flooding false blocks, so no response-check surface exists for narration as of 2026-07-03. Bounded by: the per-turn UserPromptSubmit re-injection names the narration duty alongside the tier line; the statusline carries the governed state (version, tier, ledger, critic) continuously and independently of narration; and transcript spot-checks are a review-lens item on high-risk work. Distinct from visibility-tier-line, whose opening-line half IS mechanically enforced."
+        },
+        {
+          "kind": "runtime-adapter",
+          "ref": "harness/scripts/runtime-hooks/prompt-context.mjs"
+        }
+      ]
+    },
+    {
+      "id": "statusline-governed-visibility",
+      "source": "harness/AGENTS.md#visibility",
+      "obligation": "The repo being governed by a bootstrapped harness (version, tier, ledger, critic state) is visible independently of model output.",
+      "surfaces": [
+        {
+          "kind": "runtime-adapter",
+          "ref": ".claude/settings.json"
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-runtime-adapters.mjs"
+        }
+      ]
+    },
+    {
+      "id": "validate-all-before-completion",
+      "source": "harness/AGENTS.md#tools-and-skills",
+      "obligation": "Canonical validation runs before completion claims; completed ledgers record the evidence.",
+      "surfaces": [
+        {
+          "kind": "commit-gate",
+          "ref": "harness/scripts/harness.mjs"
+        },
+        {
+          "kind": "ci",
+          "ref": ".github/workflows/validate.yml"
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-exec-plans.mjs"
+        }
+      ]
+    },
+    {
+      "id": "pushback-free-readiness",
+      "source": "harness/AGENTS.md#dual-role-governance",
+      "obligation": "Readiness requires critic terminal evidence with no unresolved pushback; nonBlockingRisks are resolved or accepted-with-rationale in the ledger.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-exec-plans.mjs"
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-cross-agent-review.mjs"
+        }
+      ]
+    },
+    {
+      "id": "dual-role-governance",
+      "source": "harness/AGENTS.md#dual-role-governance",
+      "obligation": "Non-trivial work records a primary performer and an independent critic; cross-family for high-risk when both families are available; critic models never downgraded.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-cross-agent-review.mjs"
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-exec-plans.mjs"
+        }
+      ]
+    },
+    {
+      "id": "transport-policy",
+      "source": "framework/process/review.md#transport",
+      "obligation": "Review transport policy is per-family registry data with measured ceilings; degradation is priced; parsing is echo-hardened.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-cross-agent-review.mjs"
+        },
+        {
+          "kind": "contract-test",
+          "ref": "harness/tests/contracts/review-transport-contract.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "operational-constants",
+      "source": "framework/process/governance.md#operational-constants",
+      "obligation": "Constants that gate behavior live in registry/profile data with a recorded basis, never bare literals in scripts.",
+      "surfaces": [
+        {
+          "kind": "review-lens",
+          "basis": "Required lens item for framework-change reviews (review.md); a magic number in a gate or transport path is a blocking finding. Mechanical detection of 'which literals are operational' is not tractable; the registry integrity gates enforce basis fields where the data already lives."
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-cross-agent-review.mjs"
+        }
+      ]
+    },
+    {
+      "id": "hard-stops",
+      "source": "harness/AGENTS.md#hard-stops",
+      "obligation": "Destructive operations (source deletion, git reset, force push, harness replacement, secret scope violations) checkpoint with the user first.",
+      "surfaces": [
+        {
+          "kind": "prose-declared",
+          "basis": "Real-time interception belongs to each runtime's permission layer (framework/process/permission-profiles.md); repo content cannot pre-empt a shell command and must never claim to bypass or replace permission enforcement. Bounded by: permission profiles at the runtime, secret-scan gate over tracked artifacts (validate-secrets.mjs), and cleanup guardrails checked at review time."
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-secrets.mjs"
+        }
+      ]
+    },
+    {
+      "id": "deviation-ci-floor",
+      "source": "harness/AGENTS.md#deviation-rule",
+      "obligation": "Gates are never skippable; HARNESS_SKIP is a loud local escape only \u2014 CI still enforces the same tier gate on the pushed diff.",
+      "surfaces": [
+        {
+          "kind": "ci",
+          "ref": ".github/workflows/validate.yml"
+        }
+      ]
+    },
+    {
+      "id": "skills-adapter-sync",
+      "source": "harness/AGENTS.md#tools-and-skills",
+      "obligation": "Generated skill adapters (.claude/skills, .codex/skills, skills-ref) exactly match framework/skills-src; stale, hand-edited, or orphaned outputs fail.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-skills-drift.mjs"
+        }
+      ]
+    },
+    {
+      "id": "framework-override-boundary",
+      "source": "harness/AGENTS.md#one-normative-home",
+      "obligation": "Framework/ is portable and override/ is target-owned; the distributable surface is manifest-declared; development/ never ships.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-framework-boundary.mjs"
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-source-repository.mjs"
+        }
+      ]
+    },
+    {
+      "id": "legacy-plan-acceptance",
+      "source": "framework/process/governance.md#legacy-plan-acceptance",
+      "obligation": "History is never rewritten; pre-upgrade completed plans are exempt only via the git-anchored acceptance file.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-exec-plans.mjs"
+        },
+        {
+          "kind": "contract-test",
+          "ref": "harness/tests/contracts/legacy-plan-acceptance-contract.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "intake-ready",
+      "source": "harness/AGENTS.md#bootstrap-and-distribution",
+      "obligation": "Feature work in a target is blocked until the intake artifact is ready.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-intake.mjs"
+        }
+      ]
+    },
+    {
+      "id": "upgrade-adoption-record",
+      "source": "framework/process/gates.md#commit-and-ci-floor",
+      "obligation": "Targets record the governing harness version in the target-owned adoption record; the statusline reads it and the commit gate anchors the upgrade-adoption shape to it.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-runtime-adapters.mjs"
+        },
+        {
+          "kind": "commit-gate",
+          "ref": "harness/scripts/harness.mjs"
+        }
+      ]
+    },
+    {
+      "id": "behavioral-triad",
+      "source": "harness/AGENTS.md#behavioral-triad",
+      "obligation": "Critique the ask; converge before delivering; verified verdicts on challenges \u2014 user challenges enter the review ledger as critique findings.",
+      "surfaces": [
+        {
+          "kind": "prose-declared",
+          "basis": "Judgment behaviors are not mechanically checkable from repo state. Bounded by: ledger gates require dual-role critic fields to be meaningfully filled (validate-exec-plans.mjs) and high-risk plans to carry the Critique And Debate annex (validate-cross-agent-review.mjs); convergence evidence is recorded via the artifact-contract annex when deliverable-tier, the independent critic reviews intent alignment as a required lens, and per-turn runtime re-injection keeps the obligations in the working set for capable families."
+        },
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-exec-plans.mjs"
+        },
+        {
+          "kind": "runtime-adapter",
+          "ref": "harness/scripts/runtime-hooks/prompt-context.mjs"
+        }
+      ]
+    },
+    {
+      "id": "memory-placement",
+      "source": "harness/AGENTS.md#precedence-and-memory",
+      "obligation": "Durable facts live in tracked artifacts; runtime memory may cache or point, never own; resume state precedes the step that needs it.",
+      "surfaces": [
+        {
+          "kind": "review-lens",
+          "basis": "Runtime memories are outside repo reach; placement is checked at review time (review.md lenses) and structurally encouraged by the Current Step pointer and ledger-before-edits commit gate. Entropy checks sweep stale artifacts (framework/process/gates.md)."
+        },
+        {
+          "kind": "commit-gate",
+          "ref": "harness/scripts/harness.mjs"
+        }
+      ]
+    },
+    {
+      "id": "core-structure-conformance",
+      "source": "harness/framework/process/agent-system-structure.md#core-repository-layout",
+      "obligation": "A conformant core repo has the canonical layout (agent/<pkg>, channels/<declared>, tools/, modal_app.py, docs/, tests/, harness/); transport and agent-package divergence is declared, never discovered.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-structure.mjs"
+        },
+        {
+          "kind": "review-lens",
+          "basis": "Placement rules (transports only in channels/, brain only in agent/, domain work in tools/) concern code content the path gate cannot verify; reviewers and critics check them, and repoType/conformance honesty is checked at harness-upgrade review time as the contract records."
+        }
+      ]
+    },
+    {
+      "id": "core-toolchain-conventions",
+      "source": "harness/framework/process/agent-system-structure.md#core-toolchain-conventions",
+      "obligation": "A conformant core repo shares one toolchain surface: pyproject.toml as dependency + tooling source of truth, and a Makefile defining test, lint, validate, dry-run.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-structure.mjs"
+        },
+        {
+          "kind": "review-lens",
+          "basis": "File existence and Makefile verb names are gated, but recipe honesty (the lint target actually invokes the declared linter \u2014 the motivating flake8-after-ruff drift \u2014 not just a target named lint), dependency-source honesty (requirements.txt derived from pyproject, deps not buried only in modal_app.py), and the pytest/Node suite split are content judgments checked by reviewers, since the gate reads target names, not what the recipe runs."
+        }
+      ]
+    },
+    {
+      "id": "generated-artifact-policy",
+      "source": "harness/framework/process/agent-system-structure.md#generated-artifact-policy",
+      "obligation": "Generated output (validation reports, run logs, caches, scratch state) stays in gitignored directories and is not committed structure.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-structure.mjs"
+        },
+        {
+          "kind": "review-lens",
+          "basis": "The gate exempts gitignored directories from divergence and refuses to launder force-added tracked files inside them, but whether a given reports/ file is a committed fixture or accumulated run residue is a content judgment only a reviewer can make; keep-it-gitignored is checked at review time and by entropy sweeps."
+        }
+      ]
+    },
+    {
+      "id": "writing-skills-authoring-standard",
+      "source": "framework/process/writing-skills.md",
+      "obligation": "Agent-facing instruction surfaces (skills, process docs, templates, entrypoint prose) follow the authoring standard: per-sentence no-op test, Done when: criteria on ordered steps, description formula, disclosure/placement rules, and the narrative-vs-evidence durability split.",
+      "surfaces": [
+        {
+          "kind": "gate",
+          "ref": "harness/scripts/validate-skills-drift.mjs"
+        },
+        {
+          "kind": "review-lens",
+          "basis": "High-risk and framework-affecting reviews apply the coherence lens plus a writing-skills no-op/done-when audit to every changed agent-facing prose surface; the drift gate pins skills-src as the only editable skill surface so the audited source is authoritative."
+        },
+        {
+          "kind": "prose-declared",
+          "basis": "Sentence-level no-op judgments are model-relative and settled empirically by running the skill; they are not decidable from repo state, so the standard itself remains prose with critic review as the enforcement path."
+        }
+      ]
+    },
+    {
+      "id": "vertical-slice-decomposition",
+      "source": "framework/process/gates.md#execution-ledgers",
+      "obligation": "Non-trivial work decomposes into vertical slices: each implementation step cuts through every integration layer end-to-end, dependency-ordered with the riskiest integration first, HITL vs agent-autonomous classified.",
+      "surfaces": [
+        {
+          "kind": "review-lens",
+          "basis": "Plan reviews and the independent critic check implementation-step shape against the slice rules; slice quality is a judgment over the plan's step list and the codebase's layer boundaries, checked at planning and review time."
+        },
+        {
+          "kind": "prose-declared",
+          "basis": "Whether a step is a genuine tracer bullet is not decidable from repo state before the work exists; the ledger's Implementation Steps section records the decomposition for reviewers, and gates.md carries the GOOD/BAD contrast pair."
+        }
+      ]
+    }
+  ]
+}

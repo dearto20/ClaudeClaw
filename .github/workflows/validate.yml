@@ -1,0 +1,52 @@
+name: Validation
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Validation Gate
+        run: node harness/scripts/validate-all.mjs
+
+      # CI floor for the commit gate: local git hooks don't clone and
+      # HARNESS_SKIP is a loud local escape only — this step re-runs the same
+      # tier gate on the pushed diff. Scope: pull requests and default-branch
+      # pushes (publish claims); WIP branch pushes keep validate-all only.
+      # Publish claims fail CLOSED on an unusable base (a forced ref must be
+      # gated against its true base, never just its tip); the only ungated
+      # exit is repo genesis. Policy lives in ci-diff-base.mjs (contract-tested).
+      - name: Tier Gate On Diff
+        if: github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DIFF_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -o pipefail
+          BASE="$(node harness/scripts/ci-diff-base.mjs "$EVENT_NAME" "$DIFF_BASE")" || {
+            code=$?
+            if [ "$code" = "2" ]; then exit 0; fi
+            exit "$code"
+          }
+          node harness/scripts/harness.mjs precommit --range "$BASE...HEAD"
+
+      - name: Upload Validation Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-artifacts
+          path: harness/artifacts/validation/

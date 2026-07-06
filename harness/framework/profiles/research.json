@@ -1,0 +1,12 @@
+{
+  "profile": "research",
+  "description": "Investigation and research projects whose deliverables are findings, reports, and cited claims.",
+  "mechanisms": [
+    { "id": "source-provenance", "template": "framework/templates/external-reference-audit.md", "override": "override/references/source-audit.md", "note": "Every load-bearing source classified per framework/process/references.md" },
+    { "id": "citation-integrity", "template": "framework/templates/target-validation-profile.md", "override": "override/validation/target-validation-profile.md", "note": "Executable checks: citation resolvability, quote accuracy, claim-source linkage" },
+    { "id": "recurring-cleanup", "template": "framework/templates/recurring-cleanup.md", "override": "override/cleanup/recurring-cleanup.md" }
+  ],
+  "validationCommandGroups": ["lint", "unit-test", "cleanup"],
+  "notApplicableByDefault": ["browser", "runtime", "observability", "integration-test", "build"],
+  "primaryReviewLenses": ["coherence", "testing"]
+}

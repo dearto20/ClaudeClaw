@@ -1,0 +1,14 @@
+{
+  "profile": "programming",
+  "description": "Software projects: apps, services, CLIs, libraries.",
+  "mechanisms": [
+    { "id": "worktree-runtime", "template": "framework/templates/worktree-runtime.md", "override": "override/runtime/worktree-runtime.md" },
+    { "id": "observability", "template": "framework/templates/observability.md", "override": "override/observability/observability.md" },
+    { "id": "browser-validation", "template": "framework/templates/browser-validation.md", "override": "override/browser/browser-validation.md", "when": "UI surfaces exist; otherwise reviewer-gated not-applicable" },
+    { "id": "pr-ci-loop", "template": "framework/templates/pr-ci-loop.md", "override": "override/pr/pr-ci-loop.md" },
+    { "id": "recurring-cleanup", "template": "framework/templates/recurring-cleanup.md", "override": "override/cleanup/recurring-cleanup.md" },
+    { "id": "architecture-invariants", "template": "framework/templates/architecture-invariants.md", "override": "override/quality/architecture-invariants.md" },
+    { "id": "taste-invariants", "template": "framework/templates/taste-invariants.md", "override": "override/quality/taste-invariants.md" }
+  ],
+  "validationCommandGroups": ["build", "lint", "unit-test", "integration-test", "runtime", "browser", "observability", "cleanup"]
+}

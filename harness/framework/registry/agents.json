@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.2.0",
+  "reviewRecordSchemaVersion": 2,
+  "note": "Agent families are data, not code. Validators check that governance uses registered families and that cross-agent review pairs two distinct families; adding an agent family is an entry here, not a validator change. Critic model policy: never downgrade — critic runs use a high-capability model of the critic family. Transport policy: rung ceilings and retries are per-family data with a recorded basis (calibration or dated default), never bare literals in scripts; recalibrate with `harness review calibrate`. Runtime enforcement policy: each family records which harness-visibility surfaces its runtime can mechanically enforce (statusline, prompt re-injection, response check) with a dated basis; a family with no surface is a declared exception in the enforcement map, never a silent gap.",
+  "families": {
+    "codex": {
+      "displayName": "OpenAI Codex CLI",
+      "aliases": [],
+      "cli": "codex",
+      "criticInvocationStyle": "codex-exec",
+      "defaultCriticModel": "gpt-5.5",
+      "criticModelFlag": "--codex-model",
+      "criticModelEnv": "HARNESS_CODEX_CRITIC_MODEL",
+      "highCapabilityRequirement": "equal-or-better current high-capability OpenAI model",
+      "lowCapabilityMarkers": [
+        "mini",
+        "nano",
+        "lite",
+        "small",
+        "fast",
+        "cheap",
+        "low"
+      ],
+      "highCapabilityPattern": "^gpt-([5-9](\\.\\d+)?|[1-9]\\d+)([-_.].*)?$",
+      "transport": {
+        "rungCeilingsMs": {
+          "liveness": 20000,
+          "packet-file": 300000,
+          "evidence-summary": 180000,
+          "minimal-blocking-review": 120000
+        },
+        "retriesPerRung": 1,
+        "ceilingBasis": "initial-generous-default 2026-07-02 pending `harness review calibrate` (observed: evidence-summary 22s good-run, packet-file >120s at xhigh reasoning effort)"
+      },
+      "runtimeEnforcement": {
+        "statusline": false,
+        "promptReinjection": false,
+        "responseCheck": false,
+        "basis": "Codex CLI exposes no statusline or prompt/response hook surface as of 2026-07-03; the [harness] visibility obligation is prose-declared for this family (enforcement-map: visibility-tier-line)."
+      }
+    },
+    "claude-code": {
+      "displayName": "Claude Code CLI",
+      "aliases": [
+        "claude",
+        "claude-code-unavailable:-not-logged-in"
+      ],
+      "cli": "claude",
+      "criticInvocationStyle": "claude-print",
+      "defaultCriticModel": "opus",
+      "criticModelFlag": "--claude-model",
+      "criticModelEnv": "HARNESS_CLAUDE_CRITIC_MODEL",
+      "highCapabilityRequirement": "alias or model name containing opus, fable, or mythos",
+      "highCapabilityPattern": "(^|[-_.\\s])(opus|fable|mythos)([-_.\\s\\d]|$)",
+      "lowCapabilityMarkers": [
+        "mini",
+        "nano",
+        "haiku",
+        "sonnet",
+        "lite",
+        "small",
+        "fast",
+        "cheap",
+        "low"
+      ],
+      "transport": {
+        "rungCeilingsMs": {
+          "liveness": 20000,
+          "packet-file": 300000,
+          "evidence-summary": 180000,
+          "minimal-blocking-review": 120000
+        },
+        "retriesPerRung": 1,
+        "ceilingBasis": "initial-generous-default 2026-07-02 pending `harness review calibrate`"
+      },
+      "runtimeEnforcement": {
+        "statusline": true,
+        "promptReinjection": true,
+        "responseCheck": true,
+        "basis": "Claude Code statusLine plus UserPromptSubmit/SessionStart/Stop hooks via .claude/settings.json, wired to harness/scripts/runtime-hooks/, 2026-07-03; wiring integrity gated by validate-runtime-adapters.mjs."
+      }
+    }
+  }
+}

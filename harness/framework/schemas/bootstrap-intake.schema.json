@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://development-harness.local/schemas/bootstrap-intake.schema.json",
+  "title": "DevelopmentHarness Bootstrap Intake",
+  "type": "object",
+  "required": ["schemaVersion", "state", "project", "target", "users", "domain", "risk", "validation", "constraints", "deferredNoncriticalFields"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "state": { "enum": ["draft", "incomplete", "ready"] },
+    "project": {
+      "type": "object",
+      "required": ["name", "summary", "primaryGoal", "successCriteria", "nonGoals"]
+    },
+    "target": {
+      "type": "object",
+      "required": ["platforms", "deploymentModel", "runtimeSurfaces", "environments"]
+    },
+    "users": {
+      "type": "object",
+      "required": ["audiences", "roles", "primaryUser"]
+    },
+    "domain": {
+      "type": "object",
+      "required": ["verticals", "workflows", "criticality"]
+    },
+    "risk": {
+      "type": "object",
+      "required": ["dataSensitivity", "securityPosture", "regulatoryPosture", "operationalImpact"]
+    },
+    "validation": {
+      "type": "object",
+      "required": ["expectedCommandGroups", "browserRequired", "observabilityRequired", "runtimeRequired"]
+    },
+    "constraints": { "type": "array" },
+    "deferredNoncriticalFields": { "type": "array" }
+  }
+}

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Harness pre-commit gate. Activated via: git config core.hooksPath harness/hooks
+# (or `node harness/scripts/harness.mjs activate-hooks`). Enforced for any agent
+# family and any model: tier is computed from staged paths; standard/high-risk
+# commits require an execution ledger and passing validation.
+# Escape hatch (loud, CI still enforces): HARNESS_SKIP=1 git commit …
+exec node "$(git rev-parse --show-toplevel)/harness/scripts/harness.mjs" precommit
